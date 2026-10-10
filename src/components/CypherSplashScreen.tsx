@@ -1,41 +1,200 @@
-import React, { useState, useEffect } from 'react';
-import { CypherLogo } from './CypherLogo';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface CypherSplashScreenProps {
   onComplete: () => void;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  originX: number;
+  originY: number;
+  targetX: number;
+  targetY: number;
+  text: string;
+  color: string;
+  size: number;
+  progress: number;
+  speed: number;
+  delay: number;
+  alpha: number;
+}
+
+const MATH_AND_CODE_SYMBOLS = [
+  // Advanced Math
+  '∑', '∫ dx', '∇²ψ', 'e^{iπ}+1=0', '∂L/∂W', 'λ_max', 'f\'(x)', '∞',
+  '[A·B]', 'σ(Wx+b)', 'P(A|B)', 'lim_{x→0}', '√2π', 'Ω(n)', 'det(M)',
+  'E=mc²', 'log₂(N)', 'ℝⁿ', '∂²u/∂t²', 'θ_{t+1}', 'argmax',
+  // High-Performance Code
+  'const cypher = AI()', 'tensor.forward()', '0x7FF000', 'async fn',
+  '0100101', 'matrix.dot()', 'import { neural }', 'model.generate()',
+  'stream.pipe()', 'softmax(z)', 'ReLU(x)', 'latent_dim = 4096',
+  'loss.backward()', 'optimizer.step()', 'attention(Q,K,V)', 'return token;'
+];
+
 export const CypherSplashScreen: React.FC<CypherSplashScreenProps> = ({ onComplete }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [fused, setFused] = useState(false);
   const [fading, setFading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState<'enter' | 'pulse' | 'exit'>('enter');
+  const [showBrand, setShowBrand] = useState(false);
 
   useEffect(() => {
-    // Stage 1: Enter (logo & glow zoom in)
-    const t1 = setTimeout(() => {
-      setStage('pulse');
-    }, 400);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    // Progress bar interpolation (0 -> 100% over 1400ms)
-    const startTime = Date.now();
-    const duration = 1400;
+    let animationFrameId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
 
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const nextProgress = Math.min(100, Math.round((elapsed / duration) * 100));
-      setProgress(nextProgress);
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
 
-      if (elapsed >= duration) {
-        clearInterval(interval);
-        setStage('exit');
-        setFading(true);
-        setTimeout(onComplete, 600);
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Create 70 particles originating from the 4 corners of the viewport
+    const corners = [
+      { x: -20, y: -20 }, // Top-Left
+      { x: width + 20, y: -20 }, // Top-Right
+      { x: -20, y: height + 20 }, // Bottom-Left
+      { x: width + 20, y: height + 20 }, // Bottom-Right
+    ];
+
+    const colors = [
+      '#60a5fa', // Blue
+      '#818cf8', // Indigo
+      '#a78bfa', // Purple
+      '#34d399', // Emerald
+      '#38bdf8', // Cyan
+      '#f43f5e', // Rose accent
+    ];
+
+    const particles: Particle[] = Array.from({ length: 72 }).map((_, i) => {
+      const corner = corners[i % 4];
+      // Slight spread at the corners
+      const jitterX = (Math.random() - 0.5) * (width * 0.4);
+      const jitterY = (Math.random() - 0.5) * (height * 0.4);
+
+      return {
+        x: corner.x + jitterX,
+        y: corner.y + jitterY,
+        originX: corner.x + jitterX,
+        originY: corner.y + jitterY,
+        targetX: centerX,
+        targetY: centerY,
+        text: MATH_AND_CODE_SYMBOLS[i % MATH_AND_CODE_SYMBOLS.length],
+        color: colors[i % colors.length],
+        size: Math.floor(Math.random() * 5) + 11, // 11px to 16px
+        progress: 0,
+        speed: 0.007 + Math.random() * 0.012,
+        delay: Math.random() * 15, // Staggered start frames
+        alpha: 0,
+      };
+    });
+
+    let frame = 0;
+    let shockwaveRadius = 0;
+    let shockwaveAlpha = 0;
+    let fusionTriggered = false;
+
+    const render = () => {
+      frame++;
+
+      // Trail fade effect on canvas
+      ctx.fillStyle = 'rgba(9, 9, 11, 0.28)';
+      ctx.fillRect(0, 0, width, height);
+
+      let arrivedCount = 0;
+
+      // Update & Draw Corner Converging Particles
+      for (const p of particles) {
+        if (frame > p.delay) {
+          p.progress += p.speed * (1 + p.progress * 2.8); // Accelerate towards center singularity
+
+          if (p.progress < 1) {
+            // Cubic easing convergence from corners to center
+            const ease = Math.pow(p.progress, 2.2);
+            p.x = p.originX + (p.targetX - p.originX) * ease;
+            p.y = p.originY + (p.targetY - p.originY) * ease;
+            p.alpha = Math.min(1, p.progress * 2.5);
+
+            // Draw glowing stream particle
+            ctx.save();
+            ctx.font = `${p.size}px "JetBrains Mono", monospace`;
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.alpha * 0.85;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 10;
+            ctx.fillText(p.text, p.x, p.y);
+
+            // Draw trailing trace line to center
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p.x + (p.targetX - p.x) * 0.08, p.y + (p.targetY - p.y) * 0.08);
+            ctx.strokeStyle = p.color;
+            ctx.globalAlpha = p.alpha * 0.35;
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+
+            ctx.restore();
+          } else {
+            arrivedCount++;
+          }
+        }
       }
-    }, 30);
+
+      // Singularity Fusion reached!
+      if (arrivedCount >= particles.length * 0.75 && !fusionTriggered) {
+        fusionTriggered = true;
+        setFused(true);
+        setTimeout(() => setShowBrand(true), 120);
+
+        shockwaveAlpha = 1;
+        shockwaveRadius = 5;
+
+        // Auto transition into the chat after full emergence
+        setTimeout(() => {
+          setFading(true);
+          setTimeout(onComplete, 700);
+        }, 1600);
+      }
+
+      // Draw Singularity Shockwave Ring
+      if (shockwaveAlpha > 0.01) {
+        shockwaveRadius += 9;
+        shockwaveAlpha *= 0.92;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, shockwaveRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(96, 165, 250, ${shockwaveAlpha})`;
+        ctx.lineWidth = 3.5;
+        ctx.shadowColor = '#60a5fa';
+        ctx.shadowBlur = 24;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, shockwaveRadius * 0.7, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(167, 139, 250, ${shockwaveAlpha * 0.8})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    animationFrameId = requestAnimationFrame(render);
 
     return () => {
-      clearTimeout(t1);
-      clearInterval(interval);
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
     };
   }, [onComplete]);
 
@@ -45,55 +204,65 @@ export const CypherSplashScreen: React.FC<CypherSplashScreenProps> = ({ onComple
         setFading(true);
         setTimeout(onComplete, 200);
       }}
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#09090b] text-white select-none transition-all duration-700 ease-out cursor-pointer ${
-        fading
-          ? 'opacity-0 scale-105 pointer-events-none'
-          : 'opacity-100 scale-100'
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#09090b] text-white select-none transition-all duration-700 ease-out cursor-pointer overflow-hidden ${
+        fading ? 'opacity-0 scale-105 pointer-events-none' : 'opacity-100 scale-100'
       }`}
     >
-      {/* Cinematic Ambient Radial Glow */}
-      <div className="absolute w-[500px] h-[500px] rounded-full bg-gradient-to-tr from-blue-600/15 via-indigo-500/10 to-purple-600/10 blur-[100px] pointer-events-none animate-pulse duration-1000" />
+      {/* 60fps Convergence Canvas */}
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />
 
-      {/* Central 3D Brand Logo Container */}
-      <div className="relative mb-8 flex flex-col items-center justify-center">
-        {/* Luminous Pulsing Halo */}
-        <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-blue-500/20 via-indigo-500/20 to-purple-500/20 blur-xl animate-pulse" />
-
-        {/* Outer Ring */}
-        <div className={`relative p-1.5 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-2xl transition-all duration-700 ${
-          stage === 'enter' ? 'scale-90 opacity-0' : 'scale-100 opacity-100'
-        }`}>
-          <CypherLogo size={88} useImage={true} className="rounded-2xl" />
-        </div>
-      </div>
-
-      {/* Brand Title & Typography with Staggered Entrance */}
-      <div className={`text-center space-y-2 z-10 transition-all duration-700 delay-150 ${
-        stage === 'enter' ? 'opacity-0 translate-y-3' : 'opacity-100 translate-y-0'
-      }`}>
-        <div className="flex items-center justify-center gap-2.5">
-          <h1 className="text-2xl font-bold tracking-[0.2em] uppercase text-white font-sans">
-            Cypher
-          </h1>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/30">
-            AI 2.0
-          </span>
-        </div>
-        <p className="text-xs text-zinc-400 font-medium tracking-wide">
-          Intelligence Épurée · Recherche & Documents
-        </p>
-      </div>
-
-      {/* Cinematic Glowing Progress Bar */}
-      <div className="w-56 h-1 bg-zinc-900 rounded-full mt-8 overflow-hidden z-10 border border-zinc-800/80">
+      {/* Central Singularity & Materialized 3D Mobius Emblem */}
+      <div className="relative z-10 flex flex-col items-center justify-center">
+        {/* Core Glowing Singularity Aura */}
         <div
-          className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-emerald-400 rounded-full transition-all duration-75 ease-out shadow-[0_0_12px_rgba(59,130,246,0.6)]"
-          style={{ width: `${progress}%` }}
+          className={`absolute w-72 h-72 rounded-full bg-gradient-to-tr from-blue-600/30 via-indigo-500/25 to-purple-600/25 blur-[70px] pointer-events-none transition-all duration-700 ${
+            fused ? 'scale-125 opacity-100' : 'scale-50 opacity-40'
+          }`}
         />
+
+        {/* 3D Mobius Emblem Bursting from Singularity */}
+        <div
+          className={`relative p-2 rounded-3xl bg-zinc-950/80 border border-zinc-800/80 shadow-[0_0_50px_rgba(59,130,246,0.35)] backdrop-blur-xl transition-all duration-700 ease-out ${
+            showBrand
+              ? 'scale-100 opacity-100 rotate-0'
+              : 'scale-0 opacity-0 -rotate-12'
+          }`}
+        >
+          {/* Official 3D Mobius Image */}
+          <img
+            src="/cypher_brand_mark.jpg"
+            alt="Cypher AI"
+            className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover shadow-2xl"
+          />
+
+          {/* Specular Diagonal Light Sweep Overlay */}
+          <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+            <div className="w-[200%] h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-45 animate-in slide-in-from-left duration-1000" />
+          </div>
+        </div>
+
+        {/* Brand Typography & Staggered Reveal */}
+        <div
+          className={`text-center mt-6 space-y-1.5 transition-all duration-700 delay-100 ${
+            showBrand ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+          }`}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-[0.25em] uppercase text-white font-sans drop-shadow-md">
+              Cypher
+            </h1>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/30">
+              AI
+            </span>
+          </div>
+          <p className="text-xs text-zinc-400 font-medium tracking-wider uppercase font-mono">
+            Convergence Mathématique · Intelligence Épurée
+          </p>
+        </div>
       </div>
 
       {/* Discrete Skip Hint */}
-      <span className="text-[10px] text-zinc-600 mt-5 font-mono tracking-wider z-10 uppercase">
+      <span className="absolute bottom-6 text-[10px] text-zinc-600 font-mono tracking-widest uppercase z-10">
         Cliquer pour passer
       </span>
     </div>
